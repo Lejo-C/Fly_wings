@@ -92,23 +92,64 @@ class Predictor:
         result["correct"] = result["prediction"] == ground_truth
 
         # Assign detection method
-        # If drone detected → randomly assign signal or sound
-        # In real system this depends on which sensor triggered
         if result["prediction"] == "drone":
-            result["detection_method"] = np.random.choice(
-                ["signal", "sound"],
-                p=[0.65, 0.35]  # 65% signal, 35% sound
-            )
+            result["detection_method"] = "signal"
         else:
             result["detection_method"] = "none"
 
         return result
 
+    def sdr_scan(self, center_freq=915e6, sample_rate=2.0e6) -> dict:
+        """Capture from real RTL-SDR and predict."""
+        try:
+            import scipy.signal
+            if sys.platform == 'win32' and hasattr(os, 'add_dll_directory'):
+                os.add_dll_directory(os.getcwd())
+            from rtlsdr import RtlSdr
+            
+            sdr = RtlSdr()
+            try:
+                sdr.sample_rate = sample_rate
+                sdr.center_freq = center_freq
+                sdr.gain = 'auto'
+                
+                # Read samples
+                samples = sdr.read_samples(256*1024)
+                
+                # Compute spectrogram
+                f, t, Sxx = scipy.signal.spectrogram(
+                    samples, fs=sample_rate, window='hamming', 
+                    nperseg=256, noverlap=128, return_onesided=False
+                )
+                
+                # Format and normalize
+                Sxx = np.fft.fftshift(Sxx, axes=0)
+                Sxx = 10 * np.log10(Sxx + 1e-10)
+                Sxx_norm = (Sxx - Sxx.min()) / (Sxx.max() - Sxx.min() + 1e-6)
+                Sxx_norm = (Sxx_norm * 255).astype(np.uint8)
+                
+                # Resize
+                img = Image.fromarray(Sxx_norm)
+                img_resized = img.resize((self.img_size, self.img_size), Image.Resampling.LANCZOS)
+                spec = np.array(img_resized)
+                
+                result = self.predict_array(spec)
+                result["detection_method"] = "signal"
+                return result
+
+            finally:
+                sdr.close()
+                
+        except Exception as e:
+            return {"error": f"SDR Connection failed: {str(e)}", "fallback": "simulation"}
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["single", "simulate", "health"], default="simulate")
+    parser.add_argument("--mode", choices=["single", "simulate", "sdr", "health"], default="simulate")
     parser.add_argument("--image", type=str, default=None)
+    parser.add_argument("--freq", type=float, default=915e6)
+    parser.add_argument("--rate", type=float, default=2.0e6)
     parser.add_argument("--weights", type=str, default="saved_models/drone_classifier_final.pth")
     args = parser.parse_args()
 
@@ -123,6 +164,10 @@ def main():
         if args.mode == "single" and args.image:
             result = predictor.predict_image(args.image)
             result["detection_method"] = "signal"
+        elif args.mode == "sdr":
+            result = predictor.sdr_scan(center_freq=args.freq, sample_rate=args.rate)
+            # If SDR fails, we could fallback to simulation here if desired, 
+            # but usually it's better to report the error so user knows hardware isn't working.
         elif args.mode == "simulate":
             result = predictor.simulate_scan()
         else:

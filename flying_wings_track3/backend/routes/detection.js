@@ -58,7 +58,14 @@ function runPrediction(mode = "simulate", imagePath = null) {
 // ── POST /api/scan ──
 router.post("/scan", async (req, res) => {
   try {
-    const result = await runPrediction("simulate");
+    let result = await runPrediction("sdr");
+    
+    // Fallback logic
+    if (result.error && result.error.includes("SDR Connection failed")) {
+      console.log("⚠️ SDR not found, falling back to simulation...");
+      result = await runPrediction("simulate");
+    }
+
     if (result.error) return res.status(500).json({ error: result.error });
 
     insertDetection.run(
@@ -69,7 +76,7 @@ router.post("/scan", async (req, res) => {
       result.correct ? 1 : 0,
       result.model || "efficientnet",
       result.prediction === "drone" ? 1 : 0,
-      result.detection_method || "none"
+      result.detection_method || "signal"
     );
 
     res.json({ success: true, data: result });
@@ -91,7 +98,12 @@ router.post("/scan/start", (req, res) => {
 
   scanInterval = setInterval(async () => {
     try {
-      const result = await runPrediction("simulate");
+      let result = await runPrediction("sdr");
+
+      if (result.error && result.error.includes("SDR Connection failed")) {
+        result = await runPrediction("simulate");
+      }
+
       if (!result.error) {
         scanCount++;
         if (result.prediction === "drone") droneCount++;
@@ -105,7 +117,7 @@ router.post("/scan/start", (req, res) => {
           result.correct ? 1 : 0,
           result.model || "efficientnet",
           result.prediction === "drone" ? 1 : 0,
-          result.detection_method || "none"
+          result.detection_method || "signal"
         );
 
         const io = req.app.get("io");
@@ -171,8 +183,6 @@ router.get("/stats", (req, res) => {
       avgInferenceMs: stats.avg_inference_ms ? stats.avg_inference_ms.toFixed(1) : 0,
       avgConfidence: stats.avg_confidence ? stats.avg_confidence.toFixed(1) : 0,
       signalDetections: methods.signal_count || 0,
-      soundDetections: methods.sound_count || 0,
-      noDetection: methods.no_detection_count || 0,
     },
   });
 });

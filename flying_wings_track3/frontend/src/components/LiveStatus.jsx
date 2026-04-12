@@ -15,13 +15,6 @@ function LiveStatus({ latestDetection, isScanning }) {
 
   const isDrone = latestDetection.prediction === "drone";
   const confidence = latestDetection.confidence;
-  const method = latestDetection.detection_method;
-
-  const methodLabel = method === "signal"
-    ? "📡 RF Signal"
-    : method === "sound"
-    ? "🔊 Sound"
-    : "—";
 
   return (
     <div
@@ -40,7 +33,7 @@ function LiveStatus({ latestDetection, isScanning }) {
             </h3>
             <p className="text-gray-500 text-xs">
               {latestDetection.timestamp || "Just now"} •{" "}
-              {latestDetection.model || "EfficientNet-B0"}
+              {latestDetection.model || "EfficientNet-B0"} • RF Signal Analysis
             </p>
           </div>
         </div>
@@ -67,16 +60,9 @@ function LiveStatus({ latestDetection, isScanning }) {
           ⚡ {latestDetection.inference_ms}ms
         </span>
 
-        {/* Detection Method */}
-        {isDrone && method && method !== "none" && (
-          <span
-            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-              method === "signal"
-                ? "bg-green-100 text-green-700 border border-green-200"
-                : "bg-orange-100 text-orange-700 border border-orange-200"
-            }`}
-          >
-            Detected via {methodLabel}
+        {isDrone && (
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">
+            Detected via 📡 Signal Signature
           </span>
         )}
 

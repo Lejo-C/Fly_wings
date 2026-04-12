@@ -67,9 +67,7 @@ const getStats = db.prepare(`
 
 const getDetectionMethodStats = db.prepare(`
   SELECT
-    SUM(CASE WHEN detection_method = 'signal' THEN 1 ELSE 0 END) as signal_count,
-    SUM(CASE WHEN detection_method = 'sound' THEN 1 ELSE 0 END) as sound_count,
-    SUM(CASE WHEN detection_method = 'none' THEN 1 ELSE 0 END) as no_detection_count
+    SUM(CASE WHEN detection_method = 'signal' THEN 1 ELSE 0 END) as signal_count
   FROM detections
 `);
 

@@ -17,7 +17,7 @@ The system is divided into three main layers:
 The system supports two modes of input:
 
 ### A. Real-World RTL-SDR Input
-*   **Hardware**: Connects to an RTL-SDR (Software Defined Radio) dongle.
+*   **Hardware**: Connects to an RTL-SDR (Software Defined Radio) dongle. (Run "python main.py --sdr" to start the SDR)
 *   **Capture**: The `rtlsdr` library captures raw I/Q (In-phase and Quadrature) samples from the air.
 *   **Frequency**: It tunes to specific frequencies (e.g., 915 MHz or 2.4 GHz) where drone control signals and telemetry are typically found.
 
@@ -55,8 +55,8 @@ The frontend (React) communicates with the backend to show the results to the us
 *   As soon as a detection happens, the backend emits a WebSocket event.
 *   The **Dashboard** updates instantly, showing the latest spectrogram and an alert if a drone is detected.
 
-### B. Visual Components
-*   **Pie Charts**: Show the distribution of detection methods (Signal vs. Sound).
+### Visual Components
+*   **Signal Analytics**: Detailed breakdown of drone threat rates and signal reliability.
 *   **Line Charts**: Track signal intensity and detection frequency over time.
 *   **Detection History**: A searchable list of all past threats with timestamps and confidence levels.
 
@@ -67,8 +67,10 @@ The frontend (React) communicates with the backend to show the results to the us
 2.  **Python Script** converts waves into a "Signature Image" (Spectrogram).
 3.  **AI Model** looks at the image and says "That's a Drone!".
 4.  **Backend** saves the event and sends it to the browser.
-5.  **User UI** glows red and sounds an alarm.
+5.  **User UI** shows the threat signature and system status.
 
 ---
+
+*Acoustic and ambient noise filtering is active. Detection is performed purely via RF spectrum analysis.*
 
 *Document generated for the Flying Wings Project team.*

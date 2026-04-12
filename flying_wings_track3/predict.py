@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from torchvision import transforms
 from PIL import Image
+from datetime import datetime
 
 from models import get_model
 from generate_dataset import make_drone_spectrogram, make_noise_spectrogram
@@ -135,6 +136,17 @@ class Predictor:
                 
                 result = self.predict_array(spec)
                 result["detection_method"] = "signal"
+
+                # Save if drone detected
+                if result.get("prediction") == "drone":
+                    os.makedirs("captures", exist_ok=True)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    img_path = f"captures/sdr_drone_{timestamp}.png"
+                    img_to_save = Image.fromarray(Sxx_norm).convert("RGB")
+                    img_to_save.save(img_path)
+                    result["capture_path"] = img_path
+                    self.cleanup_captures(max_files=50) # Auto-delete old photos to save space
+                
                 return result
 
             finally:
@@ -142,6 +154,21 @@ class Predictor:
                 
         except Exception as e:
             return {"error": f"SDR Connection failed: {str(e)}", "fallback": "simulation"}
+
+    def cleanup_captures(self, max_files=50, captures_dir="captures"):
+        """Deletes oldest captures if the count exceeds max_files."""
+        if not os.path.exists(captures_dir):
+            return
+        files = [os.path.join(captures_dir, f) for f in os.listdir(captures_dir) if f.endswith(".png")]
+        if len(files) <= max_files:
+            return
+        files.sort(key=os.path.getmtime)
+        to_delete = files[:len(files) - max_files]
+        for f in to_delete:
+            try:
+                os.remove(f)
+            except:
+                pass
 
 
 def main():

@@ -161,6 +161,26 @@ def get_sdr_spectrogram(sdr, sample_rate, img_size=224) -> np.ndarray:
     
     return np.array(img_resized)
 
+def cleanup_captures(max_files=100, captures_dir="captures"):
+    """Deletes oldest captures if the count exceeds max_files."""
+    if not os.path.exists(captures_dir):
+        return
+    
+    files = [os.path.join(captures_dir, f) for f in os.listdir(captures_dir) if f.endswith(".png")]
+    if len(files) <= max_files:
+        return
+    
+    # Sort by modification time (oldest first)
+    files.sort(key=os.path.getmtime)
+    
+    # Delete oldest
+    to_delete = files[:len(files) - max_files]
+    for f in to_delete:
+        try:
+            os.remove(f)
+        except Exception as e:
+            print(f"  [WARNING] Failed to delete old capture {f}: {e}")
+
 def run_live_detection(detector: DroneDetector, interval: float, duration: float, use_sdr: bool = False, center_freq: float = 915e6, sample_rate: float = 2.0e6, gain: str = 'auto'):
     """Run live RF monitoring (SDR or Simulated)."""
     sdr = None
@@ -200,14 +220,6 @@ def run_live_detection(detector: DroneDetector, interval: float, duration: float
             if use_sdr:
                 spectrogram = get_sdr_spectrogram(sdr, sample_rate)
                 ground_truth = "?"
-                
-                # Save the spectrogram photo as requested
-                os.makedirs("captures", exist_ok=True)
-                timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                # Ensure the format is correctly RGB to be saved, though numpy array shape (224,224) saves correctly
-                img_to_save = Image.fromarray(spectrogram).convert("RGB")
-                photo_path = f"captures/sdr_capture_{timestamp_str}.png"
-                img_to_save.save(photo_path)
             else:
                 # Simulate: 30% chance of drone signal
                 if np.random.random() < 0.3:
@@ -223,16 +235,29 @@ def run_live_detection(detector: DroneDetector, interval: float, duration: float
             if is_drone:
                 drone_count += 1
             
+            # Save the spectrogram photo ONLY if it's a drone
+            photo_path = None
+            if use_sdr and is_drone:
+                os.makedirs("captures", exist_ok=True)
+                timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                img_to_save = Image.fromarray(spectrogram).convert("RGB")
+                photo_path = f"captures/sdr_drone_{timestamp_str}.png"
+                img_to_save.save(photo_path)
+                cleanup_captures(max_files=50) # Auto-delete old photos to save space
+            
             # Display
             icon = "🚨 DRONE" if is_drone else "✅ Clear"
             bar = "█" * int(conf * 20)
             timestamp = datetime.now().strftime("%H:%M:%S")
             
-            correct = f"{label == ground_truth and '✓' or '✗'}" if not use_sdr else f"Saved: {photo_path}"
+            if use_sdr:
+                status_msg = f"Saved: {photo_path}" if photo_path else "Skipped (Clear)"
+            else:
+                status_msg = f"{label == ground_truth and '✓' or '✗'}"
             
             print(f"  [{timestamp}] Scan #{scan_count:03d}  "
                   f"{icon}  conf={conf:.1%} {bar}  "
-                  f"{ms:.0f}ms  {correct}")
+                  f"{ms:.0f}ms  {status_msg}")
             
             time.sleep(interval)
     

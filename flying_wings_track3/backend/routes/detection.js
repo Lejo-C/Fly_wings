@@ -1,7 +1,12 @@
 const express = require("express");
 const { spawn } = require("child_process");
 const path = require("path");
+const fs = require("fs");
+const multer = require("multer");
 const router = express.Router();
+
+if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
+const upload = multer({ dest: "uploads/" });
 
 const {
   insertDetection,
@@ -47,7 +52,12 @@ function runPrediction(mode = "simulate", imagePath = null) {
         return;
       }
       try {
-        resolve(JSON.parse(stdout.trim()));
+        const jsonMatch = stdout.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          resolve(JSON.parse(jsonMatch[0]));
+        } else {
+          throw new Error("No JSON found");
+        }
       } catch (e) {
         reject(new Error(`Failed to parse: ${stdout}`));
       }
@@ -85,18 +95,75 @@ router.post("/scan", async (req, res) => {
   }
 });
 
+// ── POST /api/scan/file ──
+router.post("/scan/file", upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+  try {
+    const imagePath = path.join(__dirname, "..", req.file.path);
+    const result = await runPrediction("single", imagePath);
+
+    if (result.error) {
+      fs.unlinkSync(imagePath);
+      return res.status(500).json({ error: result.error });
+    }
+
+    const groundTruth = req.body.ground_truth || null;
+    let correct = 0;
+    if (groundTruth) {
+        correct = result.prediction === groundTruth ? 1 : 0;
+    } else {
+        correct = result.correct ? 1 : 0;
+    }
+
+    insertDetection.run(
+      result.prediction,
+      result.confidence,
+      result.inference_ms,
+      groundTruth,
+      correct,
+      result.model || "efficientnet",
+      result.prediction === "drone" ? 1 : 0,
+      "signal"
+    );
+
+    // Provide some score tracking info via websockets if needed, or just return result
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("detection", {
+        ...result,
+        ground_truth: groundTruth,
+        correct: correct === 1,
+        scanNumber: "File",
+        timestamp: new Date().toLocaleTimeString(),
+      });
+    }
+
+    fs.unlinkSync(imagePath);
+    res.json({ success: true, data: { ...result, ground_truth: groundTruth, correct: correct === 1 } });
+  } catch (error) {
+    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+let isScanningActive = false;
+
 // ── POST /api/scan/start ──
 router.post("/scan/start", (req, res) => {
   const { interval = 2000 } = req.body;
-  if (scanInterval) return res.status(400).json({ error: "Already scanning" });
+  if (isScanningActive) return res.status(400).json({ error: "Already scanning" });
 
   const session = createSession.run();
   currentSessionId = session.lastInsertRowid;
   scanCount = 0;
   droneCount = 0;
   correctCount = 0;
+  isScanningActive = true;
 
-  scanInterval = setInterval(async () => {
+  const scanLoop = async () => {
+    if (!isScanningActive) return;
+    const loopStartTime = Date.now();
     try {
       let result = await runPrediction("sdr");
 
@@ -104,7 +171,7 @@ router.post("/scan/start", (req, res) => {
         result = await runPrediction("simulate");
       }
 
-      if (!result.error) {
+      if (isScanningActive && !result.error) {
         scanCount++;
         if (result.prediction === "drone") droneCount++;
         if (result.correct) correctCount++;
@@ -132,17 +199,29 @@ router.post("/scan/start", (req, res) => {
     } catch (err) {
       console.error("Scan error:", err.message);
     }
-  }, interval);
+
+    if (isScanningActive) {
+      const elapsed = Date.now() - loopStartTime;
+      const nextWait = Math.max(0, interval - elapsed);
+      scanInterval = setTimeout(scanLoop, nextWait);
+    }
+  };
+
+  // Start the loop
+  scanLoop();
 
   res.json({ success: true, message: "Scanning started", sessionId: currentSessionId, interval });
 });
 
 // ── POST /api/scan/stop ──
 router.post("/scan/stop", (req, res) => {
-  if (!scanInterval) return res.status(400).json({ error: "No active scan" });
+  if (!isScanningActive) return res.status(400).json({ error: "No active scan" });
 
-  clearInterval(scanInterval);
-  scanInterval = null;
+  isScanningActive = false;
+  if (scanInterval) {
+    clearTimeout(scanInterval);
+    scanInterval = null;
+  }
 
   if (currentSessionId) {
     const accuracy = scanCount > 0 ? (correctCount / scanCount) * 100 : 0;
@@ -210,9 +289,9 @@ router.delete("/detections", (req, res) => {
 router.get("/health", async (req, res) => {
   try {
     const result = await runPrediction("health");
-    res.json({ server: "ok", model: result.status || "unknown", modelExists: result.model_exists || false });
+    res.json({ server: "ok", model: result.status || "unknown", modelExists: result.model_exists || false, sdrStatus: result.sdr_status || "disconnected" });
   } catch (error) {
-    res.json({ server: "ok", model: "error", error: error.message });
+    res.json({ server: "ok", model: "error", error: error.message, sdrStatus: "error" });
   }
 });
 

@@ -32,27 +32,28 @@ function Dashboard({ isScanning, loading, onSingleScan, onStartScan, onStopScan,
           )}
         </button>
 
-        {/* Start / Stop */}
-        {!isScanning ? (
-          <button
-            onClick={onStartScan}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg 
-                       text-white text-sm font-medium transition-colors flex items-center space-x-2"
-          >
-            <span>▶</span>
-            <span>Start Continuous</span>
-          </button>
-        ) : (
-          <button
-            onClick={onStopScan}
-            className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg 
-                       text-white text-sm font-medium transition-colors flex items-center 
-                       space-x-2 animate-pulse"
-          >
-            <span>⏹</span>
-            <span>Stop</span>
-          </button>
-        )}
+        {/* Start */}
+        <button
+          onClick={onStartScan}
+          disabled={isScanning}
+          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg 
+                     text-white text-sm font-medium transition-colors flex items-center space-x-2"
+        >
+          <span>▶</span>
+          <span>Start Continuous</span>
+        </button>
+
+        {/* Stop */}
+        <button
+          onClick={onStopScan}
+          disabled={!isScanning}
+          className="px-4 py-2 bg-red-500 hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg 
+                     text-white text-sm font-medium transition-colors flex items-center 
+                     space-x-2"
+        >
+          <span>⏹</span>
+          <span>Stop Scan</span>
+        </button>
 
         {/* Clear */}
         <button

@@ -10,6 +10,11 @@ const api = axios.create({
 // ── Single Scan ──
 export const singleScan = () => api.post("/scan");
 
+// ── Scan File ──
+export const scanFile = (formData) => api.post("/scan/file", formData, {
+  headers: { "Content-Type": "multipart/form-data" }
+});
+
 // ── Start Continuous Scan ──
 export const startScanning = (interval = 2000) =>
   api.post("/scan/start", { interval });

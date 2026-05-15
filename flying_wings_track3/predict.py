@@ -72,9 +72,17 @@ class Predictor:
             confidence, predicted = probs.max(1)
         inference_ms = (time.perf_counter() - t0) * 1000
 
+        pred_label = self.classes[predicted.item()]
+        conf_val = confidence.item()
+
+        # Strict threshold to prevent false positives from real SDR background noise
+        if pred_label == "drone" and conf_val < 0.98:
+            pred_label = "noise"
+            conf_val = 1.0 - conf_val # Invert confidence for noise
+            
         return {
-            "prediction": self.classes[predicted.item()],
-            "confidence": round(confidence.item() * 100, 2),
+            "prediction": pred_label,
+            "confidence": round(conf_val * 100, 2),
             "inference_ms": round(inference_ms, 2),
             "model": self.model_name,
         }
@@ -137,15 +145,16 @@ class Predictor:
                 result = self.predict_array(spec)
                 result["detection_method"] = "signal"
 
-                # Save if drone detected
-                if result.get("prediction") == "drone":
-                    os.makedirs("captures", exist_ok=True)
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    img_path = f"captures/sdr_drone_{timestamp}.png"
-                    img_to_save = Image.fromarray(Sxx_norm).convert("RGB")
-                    img_to_save.save(img_path)
-                    result["capture_path"] = img_path
-                    self.cleanup_captures(max_files=50) # Auto-delete old photos to save space
+                # Save all captures
+                os.makedirs("captures", exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                pred_label = result.get("prediction", "unknown")
+                status_name = "drone_alert" if pred_label == "drone" else "clear_image"
+                img_path = f"captures/sdr_{status_name}_{timestamp}.png"
+                img_to_save = Image.fromarray(Sxx_norm).convert("RGB")
+                img_to_save.save(img_path)
+                result["capture_path"] = img_path
+                self.cleanup_captures(max_files=100) # Keep more since we save all
                 
                 return result
 
@@ -183,7 +192,17 @@ def main():
     try:
         if args.mode == "health":
             exists = os.path.isfile(args.weights)
-            print(json.dumps({"status": "ok" if exists else "no_model", "model_exists": exists}))
+            sdr_status = "disconnected"
+            try:
+                if sys.platform == 'win32' and hasattr(os, 'add_dll_directory'):
+                    os.add_dll_directory(os.getcwd())
+                from rtlsdr import RtlSdr
+                sdr = RtlSdr()
+                sdr.close()
+                sdr_status = "connected"
+            except Exception:
+                pass
+            print(json.dumps({"status": "ok" if exists else "no_model", "model_exists": exists, "sdr_status": sdr_status}))
             return
 
         predictor = Predictor(args.weights)

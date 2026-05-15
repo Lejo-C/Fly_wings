@@ -7,6 +7,7 @@ import LiveStatus from "./components/LiveStatus";
 import DetectionHistory from "./components/DetectionHistory";
 import AlertBanner from "./components/AlertBanner";
 import PieChartPanel from "./components/PieChartPanel";
+import TestDataset from "./components/TestDataset";
 import {
   singleScan,
   startScanning,
@@ -15,11 +16,13 @@ import {
   getStats,
   getScanStatus,
   clearDetections,
+  healthCheck,
 } from "./api/api";
 
 const socket = io("http://localhost:5000");
 
 function App() {
+  const [currentTab, setCurrentTab] = useState("dashboard");
   const [isScanning, setIsScanning] = useState(false);
   const [detections, setDetections] = useState([]);
   const [stats, setStats] = useState({
@@ -32,17 +35,20 @@ function App() {
   const [latestDetection, setLatestDetection] = useState(null);
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [sdrStatus, setSdrStatus] = useState("checking");
 
   const fetchData = useCallback(async () => {
     try {
-      const [detRes, statsRes, statusRes] = await Promise.all([
+      const [detRes, statsRes, statusRes, healthRes] = await Promise.all([
         getDetections(100),
         getStats(),
         getScanStatus(),
+        healthCheck(),
       ]);
       setDetections(detRes.data.data || []);
       setStats(statsRes.data.data || stats);
       setIsScanning(statusRes.data.active);
+      setSdrStatus(healthRes.data.sdrStatus || "disconnected");
     } catch (err) {
       console.error("Failed to fetch data:", err);
     }
@@ -142,40 +148,46 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
-      <Navbar />
+      <Navbar currentTab={currentTab} onTabChange={setCurrentTab} sdrStatus={sdrStatus} />
 
       {alert && <AlertBanner alert={alert} onClose={() => setAlert(null)} />}
 
       <main className="max-w-7xl mx-auto px-4 py-5 space-y-4">
-        {/* Control Panel */}
-        <Dashboard
-          isScanning={isScanning}
-          loading={loading}
-          onSingleScan={handleSingleScan}
-          onStartScan={handleStartScan}
-          onStopScan={handleStopScan}
-          onClear={handleClear}
-        />
-
-        {/* Stats Cards */}
-        <StatsCards stats={stats} />
-
-        {/* Split Layout: Left (Status + Table) | Right (Pie Chart) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* LEFT SIDE — 2/3 width */}
-          <div className="lg:col-span-2 space-y-4">
-            <LiveStatus
-              latestDetection={latestDetection}
+        {currentTab === "dashboard" ? (
+          <>
+            {/* Control Panel */}
+            <Dashboard
               isScanning={isScanning}
+              loading={loading}
+              onSingleScan={handleSingleScan}
+              onStartScan={handleStartScan}
+              onStopScan={handleStopScan}
+              onClear={handleClear}
             />
-            <DetectionHistory detections={detections} />
-          </div>
 
-          {/* RIGHT SIDE — 1/3 width */}
-          <div className="lg:col-span-1">
-            <PieChartPanel detections={detections} stats={stats} />
-          </div>
-        </div>
+            {/* Stats Cards */}
+            <StatsCards stats={stats} />
+
+            {/* Split Layout: Left (Status + Table) | Right (Pie Chart) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* LEFT SIDE — 2/3 width */}
+              <div className="lg:col-span-2 space-y-4">
+                <LiveStatus
+                  latestDetection={latestDetection}
+                  isScanning={isScanning}
+                />
+                <DetectionHistory detections={detections} />
+              </div>
+
+              {/* RIGHT SIDE — 1/3 width */}
+              <div className="lg:col-span-1">
+                <PieChartPanel detections={detections} stats={stats} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <TestDataset />
+        )}
       </main>
 
       <footer className="text-center py-3 text-gray-400 text-xs border-t border-gray-200">

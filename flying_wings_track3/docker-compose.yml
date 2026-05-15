@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  backend:
+    build: 
+      context: .
+      dockerfile: backend.Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      # Persist the database and captures so they aren't lost when container stops
+      - ./captures:/app/captures
+    devices:
+      # ⚠️ CRITICAL: This allows the Docker container to access the physical RTL-SDR USB
+      - "/dev/bus/usb:/dev/bus/usb"
+    privileged: true
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend

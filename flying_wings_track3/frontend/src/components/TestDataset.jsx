@@ -150,7 +150,7 @@ function TestDataset() {
 
       <div className="flex flex-col sm:flex-row items-center gap-4 mb-8">
         <label className="block w-full sm:w-auto">
-          <span className="sr-only">Choose files</span>
+          <span className="text-sm font-semibold block mb-1 text-gray-700">Select Folder:</span>
           <input 
             type="file" 
             multiple 
@@ -162,7 +162,24 @@ function TestDataset() {
               file:rounded-full file:border-0
               file:text-sm file:font-semibold
               file:bg-indigo-50 file:text-indigo-700
-              hover:file:bg-indigo-100 cursor-pointer disabled:opacity-50"
+              hover:file:bg-indigo-100 disabled:opacity-50"
+          />
+        </label>
+
+        <label className="block w-full sm:w-auto">
+          <span className="text-sm font-semibold block mb-1 text-gray-700">Or Select Files (Images / IQ):</span>
+          <input 
+            type="file" 
+            multiple 
+            accept="image/*,.npy,.bin,.iq,.dat"
+            onChange={handleFileChange}
+            disabled={isProcessing}
+            className="block w-full text-sm text-gray-500
+              file:mr-4 file:py-2 file:px-4
+              file:rounded-full file:border-0
+              file:text-sm file:font-semibold
+              file:bg-emerald-50 file:text-emerald-700
+              hover:file:bg-emerald-100 disabled:opacity-50"
           />
         </label>
         

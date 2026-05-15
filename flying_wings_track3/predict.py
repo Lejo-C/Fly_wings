@@ -40,7 +40,29 @@ class Predictor:
         ])
 
     def predict_image(self, image_path: str) -> dict:
-        img = Image.open(image_path).convert("RGB")
+        ext = os.path.splitext(image_path)[1].lower()
+        if ext in ['.npy', '.bin', '.dat', '.iq']:
+            import scipy.signal
+            if ext == '.npy':
+                samples = np.load(image_path)
+            else:
+                samples = np.fromfile(image_path, dtype=np.complex64)
+                
+            sample_rate = 2.0e6
+            f, t, Sxx = scipy.signal.spectrogram(
+                samples, fs=sample_rate, window='hamming', 
+                nperseg=256, noverlap=128, return_onesided=False
+            )
+            Sxx = np.fft.fftshift(Sxx, axes=0)
+            Sxx = 10 * np.log10(Sxx + 1e-10)
+            Sxx_norm = (Sxx - Sxx.min()) / (Sxx.max() - Sxx.min() + 1e-6)
+            Sxx_norm = (Sxx_norm * 255).astype(np.uint8)
+            
+            img = Image.fromarray(Sxx_norm)
+            img = img.resize((self.img_size, self.img_size), Image.Resampling.LANCZOS)
+            img = img.convert("RGB")
+        else:
+            img = Image.open(image_path).convert("RGB")
         tensor = self.transform(img).unsqueeze(0).to(self.device)
 
         t0 = time.perf_counter()
